@@ -17,4 +17,3 @@ void init_sys(void) {
 void quit_sys(void) {
     disable_spi();
 }
-

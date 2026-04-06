@@ -19,7 +19,11 @@ LINKER = util/STM32F091RCTx_FLASH.ld
 INCLUDES = -I$(INC) -I$(INC_CMSIS)
 COMMON_FLAGS = -mcpu=cortex-m0 -mthumb -mlittle-endian -DSTM32F091xC
 COMP_FLAGS = $(COMMON_FLAGS) -std=c99 -g3 -O0 -Wall -Wextra -ffreestanding $(INCLUDES) -c
-LINK_FLAGS = $(COMMON_FLAGS) -T$(LINKER) -nostdlib -lgcc -Wl,--gc-sections --specs=nosys.specs
+LINK_FLAGS = $(COMMON_FLAGS) -T$(LINKER) -nostartfiles -Wl,--gc-sections --specs=nosys.specs
+CRTI = $(shell $(CC) -print-file-name=crti.o)
+CRTBEGIN = $(shell $(CC) -print-file-name=crtbegin.o)
+CRTEND = $(shell $(CC) -print-file-name=crtend.o)
+CRTN = $(shell $(CC) -print-file-name=crtn.o)
 
 # Collecting source code files
 _srcs_c = $(wildcard $(SRC)/*.c)
@@ -29,27 +33,30 @@ DEPS = $(INC)/*.h $(INC)/CMSIS/*.h
 
 # Compile the whole project as the default "make" target
 # Separate debugging symbols' table from the executable itself
-$(DEST)/main.hex: $(DEST)/main.elf
+$(DEST)/main.hex: $(DEST)/main.elf | $(DEST)
 	arm-none-eabi-objcopy -Oihex $< $@
 	arm-none-eabi-strip --strip-debug --strip-unneeded $@ -o $@
-$(DEST)/main.dbg: $(DEST)/main.elf
+$(DEST)/main.dbg: $(DEST)/main.elf | $(DEST)
 	arm-none-eabi-objcopy --only-keep-debug $< $@
 
 # Link .o files
-$(DEST)/main.elf: $(OBJS)
-	$(CC) $(LINK_FLAGS) $^ -o $@
+$(DEST)/main.elf: $(OBJS) | $(DEST)
+	$(CC) $(LINK_FLAGS) $(CRTI) $(CRTBEGIN) $^ $(CRTEND) $(CRTN) -o $@
 
 # Compile every source file
-$(DEST)/%.o: $(SRC)/%.c $(INC)/%.h
+$(DEST)/%.o: $(SRC)/%.c $(INC)/%.h | $(DEST)
 	$(CC) $(COMP_FLAGS) $< -o $@
-$(DEST)/%.o: $(SRC)/%.s $(INC)/%.h
+$(DEST)/%.o: $(SRC)/%.s $(INC)/%.h | $(DEST)
 	$(CC) $(COMP_FLAGS) $< -o $@
 
 # These 2 files are kidna exceptional - we don't need headers for them
-$(DEST)/main.o: $(SRC)/main.c
+$(DEST)/main.o: $(SRC)/main.c | $(DEST)
 	$(CC) $(COMP_FLAGS) $< -o $@
-$(DEST)/startup_stm32f091xc.o: $(SRC)/startup_stm32f091xc.s
+$(DEST)/startup_stm32f091xc.o: $(SRC)/startup_stm32f091xc.s | $(DEST)
 	$(CC) $(COMP_FLAGS) $< -o $@
+
+$(DEST):
+	mkdir -p $(DEST)
 
 .PHONY: con debug flash clean
 con:
@@ -60,4 +67,3 @@ flash: $(DEST)/main.hex $(DEST)/main.dbg
 	$(GDB) -x $(UTIL)/flash.gdb
 clean:
 	rm -f $(DEST)/*
-
